@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Vegetarian Meal Plan</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Chosen Palette: Earthy Neutrals -->
+    <!-- Application Structure Plan: A tab-based SPA structure was chosen to logically separate the two primary user tasks: viewing the daily meal plan and checking the shopping list. This avoids overwhelming the user. Within the meal plan, day-by-day navigation allows focused viewing of recipes without clutter. This task-oriented design enhances usability by creating a clear, predictable user flow: Select a view (Plan/Shop) -> Select a day (if in Plan) -> Consume information. -->
+    <!-- Visualization & Content Choices: 
+        - Meal Plan -> Goal: Inform/Organize -> Viz: Interactive daily cards -> Interaction: Click day buttons to update content -> Justification: Breaks down the 8-day plan into manageable daily chunks. 
+        - Shopping List -> Goal: Organize/Task Management -> Viz: Categorized, checkable lists -> Interaction: Click checkbox to strike-through item -> Justification: Mimics a real-world shopping experience and provides a clear sense of completion.
+        - Cuisine Overview -> Goal: Summarize/Engage -> Viz: Donut Chart (Chart.js) -> Interaction: Hover for tooltips -> Justification: Provides a high-level, "at-a-glance" summary of the culinary variety for the week, adding a layer of engaging data visualization.
+    -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body {
+            background-color: #FDFBF6;
+            font-family: 'Inter', sans-serif;
+        }
+        .nav-button-active {
+            background-color: #A0937D !important;
+            color: #FFFFFF !important;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .day-button-active {
+            background-color: #E6A4B4;
+            color: #FFFFFF;
+            font-weight: 600;
+        }
+        .content-card {
+            background-color: #FFFFFF;
+            border: 1px solid #EAEAEA;
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+        }
+        .content-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 16px rgba(0,0,0,0.07);
+        }
+        .chart-container {
+            position: relative; 
+            width: 100%; 
+            max-width: 400px; 
+            margin-left: auto; 
+            margin-right: auto; 
+            height: auto;
+            max-height: 400px;
+        }
+        .shopping-item-checked label {
+            text-decoration: line-through;
+            color: #9CA3AF;
+        }
+    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body class="text-gray-800">
+
+    <div class="container mx-auto max-w-5xl p-4 sm:p-6 md:p-8">
+        
+        <header class="text-center mb-8">
+            <h1 class="text-3xl sm:text-4xl font-bold text-gray-900 tracking-tight">8-Day Vegetarian Meal Plan</h1>
+            <p class="text-gray-600 mt-2">A healthy, quick, and budget-friendly plan for two.</p>
+        </header>
+
+        <nav class="flex justify-center bg-gray-100 p-2 rounded-xl mb-8 max-w-md mx-auto">
+            <button id="nav-plan" class="nav-button flex-1 text-center py-2 px-4 rounded-lg font-semibold text-gray-700 transition-colors duration-200">Meal Plan</button>
+            <button id="nav-shop" class="nav-button flex-1 text-center py-2 px-4 rounded-lg font-semibold text-gray-700 transition-colors duration-200">Shopping List</button>
+        </nav>
+
+        <main id="content-wrapper">
+            
+            <div id="meal-plan-view">
+                <div class="text-center mb-8">
+                    <p class="text-gray-700 max-w-2xl mx-auto">This section provides the daily meal breakdown. The plan includes batch-cooked meals to save time, with leftovers often used for the next day's lunch. Click a day below to see the menu and recipes.</p>
+                </div>
+
+                <div class="mb-10">
+                    <h2 class="text-2xl font-bold text-center mb-4 text-gray-800">Week's Cuisine Overview</h2>
+                    <div class="chart-container">
+                        <canvas id="mealTypeChart"></canvas>
+                    </div>
+                </div>
+                
+                <div class="flex flex-wrap justify-center gap-2 mb-8" id="day-nav"></div>
+                
+                <div id="meal-display" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
+            </div>
+
+            <div id="shopping-list-view" class="hidden">
+                 <div class="text-center mb-8">
+                    <p class="text-gray-700 max-w-2xl mx-auto">Here is the complete shopping list for the entire week, categorized for your convenience. Check items off as you shop to keep track.</p>
+                </div>
+                <div id="list-display" class="space-y-8 max-w-3xl mx-auto bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-gray-100"></div>
+            </div>
+        </main>
+
+        <footer class="text-center mt-12 text-gray-500 text-sm">
+            <p>Designed to make your week delicious and easy.</p>
+        </footer>
+
+    </div>
+
+    <script>
+        const mealData = {
+            'sunday': {
+                lunch: null,
+                dinner: {
+                    name: "Greek-Style Halloumi & Veggie Skewers",
+                    batch: false,
+                    ingredients: [
+                        "1 block Halloumi (225g), cubed", "1 Red Onion, cut into chunks", "1 Courgette, cut into chunks", "1 Red Bell Pepper, cut into chunks", "1 tbsp Olive Oil", "1 tsp Dried Oregano", "Juice of 1/2 Lemon", "4 Wholemeal Pitta Breads", "Side Salad: Mixed salad leaves, cucumber, cherry tomatoes", "To Serve: Tzatziki dip, Olives"
+                    ],
+                    recipe: [
+                        "Preheat grill or BBQ to medium-high. If using wooden skewers, soak them in water for 20 minutes.", "In a bowl, toss the halloumi, red onion, courgette, and red pepper with olive oil, oregano, and lemon juice. Season with black pepper.", "Thread the halloumi and vegetables onto the skewers.", "Grill for 8-10 minutes, turning occasionally, until the halloumi is golden and the vegetables are tender.", "Warm the pitta breads. Prepare a simple side salad.", "Serve the skewers with warm pitta, salad, a generous dollop of tzatziki, and a side of olives."
+                    ]
+                }
+            },
+            'monday': {
+                lunch: {
+                    name: "Leftover Greek Salad",
+                    batch: false,
+                    ingredients: ["Leftover salad, chopped vegetables, and olives from last night.", "Any leftover halloumi, if available."],
+                    recipe: ["Combine all leftovers from Sunday's dinner into a refreshing salad."]
+                },
+                dinner: {
+                    name: "Lentil Bolognese",
+                    batch: true,
+                    ingredients: [
+                        "1 tbsp Olive Oil", "2 Onions, finely chopped", "2 cloves Garlic, crushed", "2 Carrots, finely chopped", "2 sticks Celery, finely chopped", "1 cup (200g) Red Lentils, rinsed", "2 cans (400g each) Chopped Tomatoes", "1 tbsp Tomato Purée", "1 tsp Dried Mixed Herbs", "1 Vegetable Stock Cube in 500ml hot water", "250g Wholewheat Spaghetti"
+                    ],
+                    recipe: [
+                        "Heat olive oil in a large pot. Sauté the onions, garlic, carrots, and celery for 10 minutes until soft.", "Stir in the tomato purée and cook for another minute.", "Add the rinsed lentils, chopped tomatoes, mixed herbs, and vegetable stock.", "Bring to a boil, then reduce heat, cover, and simmer for 30-40 minutes, until lentils are tender.", "Cook spaghetti according to package instructions.", "Serve half the bolognese with the spaghetti. Cool and refrigerate the other half."
+                    ]
+                }
+            },
+            'tuesday': {
+                lunch: { name: "Leftover Lentil Bolognese" },
+                dinner: {
+                    name: "Spicy Black Bean Burgers",
+                    batch: false,
+                    ingredients: [
+                        "1 can (400g) Black Beans, drained & rinsed", "1/2 Red Onion, finely chopped", "1 clove Garlic, crushed", "1/2 tsp Cumin", "1/2 tsp Smoked Paprika", "Pinch of Chilli Flakes (optional)", "1/2 cup (50g) Breadcrumbs", "2 tbsp Plain Flour", "4 Burger Buns", "To Serve: Lettuce, sliced tomato, burger sauce", "Side: 2 large Sweet Potatoes, cut into wedges"
+                    ],
+                    recipe: [
+                        "Preheat oven to 200°C (180°C Fan). Toss sweet potato wedges with a little oil and bake for 25-30 minutes.", "In a bowl, mash the black beans roughly with a fork.", "Stir in the onion, garlic, spices, and breadcrumbs. Mix well.", "Shape mixture into two patties. Lightly dust with flour.", "Heat a little oil in a frying pan and cook burgers for 4-5 minutes on each side until crisp.", "Serve in toasted buns with your favourite toppings and sweet potato wedges."
+                    ]
+                }
+            },
+            'wednesday': {
+                lunch: { name: "Leftover Lentil Bolognese" },
+                dinner: {
+                    name: "Chickpea & Spinach Curry",
+                    batch: true,
+                    ingredients: [
+                        "1 tbsp Sunflower Oil", "1 Onion, chopped", "2 cloves Garlic, crushed", "1 tbsp Medium Curry Powder", "1 can (400g) Chickpeas, drained", "1 can (400g) Chopped Tomatoes", "1 can (400ml) Light Coconut Milk", "200g Fresh Spinach", "1 cup (180g) Brown Rice"
+                    ],
+                    recipe: [
+                        "Cook brown rice according to packet instructions.", "Heat oil in a pan. Sauté the onion for 5 minutes. Add garlic and curry powder, cook for 1 minute.", "Stir in chickpeas, chopped tomatoes, and coconut milk. Simmer for 15 minutes.", "Stir in the spinach until it wilts. Season to taste.", "Serve half the curry with rice. Cool and refrigerate the rest."
+                    ]
+                }
+            },
+            'thursday': {
+                lunch: { name: "Leftover Chickpea & Spinach Curry" },
+                dinner: {
+                    name: "Quick Veggie Stir-fry",
+                    batch: false,
+                    ingredients: [
+                        "1 tbsp Sunflower Oil", "1 Red Onion, sliced", "1 Bell Pepper (any colour), sliced", "1 Carrot, julienned", "1 Courgette, julienned", "2 nests of Egg Noodles", "2 tbsp Soy Sauce", "1 tbsp Honey or Maple Syrup", "1 tsp Ginger Puree"
+                    ],
+                    recipe: [
+                        "Cook noodles according to package instructions.", "Heat oil in a wok. Add onion and pepper, stir-fry for 3-4 minutes.", "Add carrot and courgette, cook for another 2-3 minutes.", "Mix soy sauce, honey/maple syrup, and ginger.", "Drain noodles and add to the pan with vegetables and sauce. Toss and serve."
+                    ]
+                }
+            },
+            'friday': {
+                lunch: { name: "Leftover Chickpea & Spinach Curry" },
+                dinner: {
+                    name: "Homemade Veggie Naan Pizzas",
+                    batch: false,
+                    ingredients: [
+                        "2 Plain Naan Breads", "4 tbsp Tomato Purée or Passata", "1/2 Red Onion, thinly sliced", "1/2 Bell Pepper, thinly sliced", "Handful of Olives, sliced", "1 cup (120g) Grated Mozzarella", "Side Salad: Mixed salad leaves"
+                    ],
+                    recipe: [
+                        "Preheat oven to 200°C (180°C Fan).", "Place naans on a baking tray. Spread each with tomato purée.", "Top with onion, pepper, olives, and mozzarella.", "Bake for 8-10 minutes until cheese is bubbly.", "Serve with a simple side salad."
+                    ]
+                }
+            },
+            'saturday': {
+                lunch: { name: "Leftover Naan Pizza" },
+                dinner: {
+                    name: "Jacket Potatoes with Beans & Cheese",
+                    batch: false,
+                    ingredients: [
+                        "2 large Baking Potatoes", "1 can (420g) Baked Beans", "100g Grated Cheddar Cheese", "Butter (optional)"
+                    ],
+                    recipe: [
+                        "Preheat oven to 200°C (180°C Fan). Prick potatoes, rub with oil and salt.", "Bake for 60-90 minutes, until skin is crisp and inside is fluffy.", "Heat the baked beans.", "Cut potatoes open, fluff with a fork, add butter if you like, then top with hot beans and grated cheese."
+                    ]
+                }
+            },
+            'next_monday': {
+                 lunch: { name: "Leftover Mushroom & Pea Risotto" },
+                 dinner: null,
+            },
+            'prev_sunday': {
+                lunch: { name: "Leftover Jacket Potato with Side Salad" },
+                dinner: {
+                    name: "Creamy Mushroom & Pea Risotto",
+                    batch: false,
+                    ingredients: [
+                        "1 tbsp Olive Oil", "1 Onion, finely chopped", "2 cloves Garlic, crushed", "250g Chestnut Mushrooms, sliced", "300g Arborio Rice", "1L Vegetable Stock, hot", "1 cup (150g) Frozen Peas", "50g Grated Parmesan (or vegetarian alternative)", "Small knob of Butter"
+                    ],
+                    recipe: [
+                        "Heat oil in a pan. Cook onion for 5 mins. Add garlic & mushrooms, cook until soft.", "Stir in rice and cook for 1 minute.", "Add stock one ladleful at a time, stirring until absorbed before adding the next (approx. 20 mins).", "With the last ladleful of stock, add frozen peas.", "Once creamy, stir in parmesan and butter. Season and serve."
+                    ]
+                }
+            }
+        };
+
+        const shoppingListData = {
+            "Fresh Fruit & Vegetables": ["Onions (approx. 6-7 medium)", "Garlic (1 bulb)", "Carrots (3-4 medium)", "Celery (2 sticks)", "Courgettes (2 medium)", "Bell Peppers (2 red, 1 any colour)", "Sweet Potatoes (2 large)", "Baking Potatoes (2 large)", "Chestnut Mushrooms (250g)", "Spinach (200g bag)", "Mixed Salad Leaves (1 bag)", "Cucumber (1)", "Cherry Tomatoes (1 punnet)", "Lemon (1)"],
+            "Dairy & Chilled": ["Halloumi (1 block, 225g)", "Tzatziki Dip (1 pot)", "Grated Mozzarella (1 bag, approx. 150g)", "Cheddar Cheese (100g)", "Parmesan or vegetarian alternative", "Butter (1 small block)", "Light Coconut Milk (1 can, 400ml)"],
+            "Pantry & Cupboard": ["Olive Oil", "Sunflower Oil", "Dried Oregano", "Dried Mixed Herbs", "Medium Curry Powder", "Cumin", "Smoked Paprika", "Chilli Flakes (optional)", "Black Pepper", "Salt", "Red Lentils (200g)", "Black Beans (1 can)", "Chopped Tomatoes (4 cans)", "Chickpeas (1 can)", "Baked Beans (1 can)", "Tomato Purée (1 tube)", "Vegetable Stock Cubes (1 box)", "Wholewheat Spaghetti (250g)", "Brown Rice (at least 180g)", "Arborio Rice (300g)", "Egg Noodles (2 nests)", "Breadcrumbs (50g)", "Plain Flour (small bag)", "Soy Sauce", "Honey or Maple Syrup", "Ginger Puree (1 tube)", "Olives (1 jar or pot)", "Wholemeal Pitta Breads (1 pack)", "Burger Buns (1 pack)", "Plain Naan Breads (1 pack)"]
+        };
+        
+        const days = [
+            { id: 'sunday', name: 'Sun 6th' },
+            { id: 'monday', name: 'Mon 7th' },
+            { id: 'tuesday', name: 'Tue 8th' },
+            { id: 'wednesday', name: 'Wed 9th' },
+            { id: 'thursday', name: 'Thu 10th' },
+            { id: 'friday', name: 'Fri 11th' },
+            { id: 'saturday', name: 'Sat 12th' },
+            { id: 'prev_sunday', name: 'Sun 13th' },
+            { id: 'next_monday', name: 'Mon 14th' }
+        ];
+
+        window.addEventListener('DOMContentLoaded', () => {
+            const navPlan = document.getElementById('nav-plan');
+            const navShop = document.getElementById('nav-shop');
+            const dayNavContainer = document.getElementById('day-nav');
+            
+            navPlan.addEventListener('click', () => showView('plan'));
+            navShop.addEventListener('click', () => showView('shop'));
+
+            days.forEach(day => {
+                const button = document.createElement('button');
+                button.id = `day-${day.id}`;
+                button.textContent = day.name;
+                button.className = 'day-button py-2 px-4 rounded-full font-medium text-sm sm:text-base text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors duration-200';
+                button.addEventListener('click', () => renderMealPlan(day.id));
+                dayNavContainer.appendChild(button);
+            });
+
+            renderShoppingList();
+            renderChart();
+            showView('plan');
+            renderMealPlan('sunday');
+        });
+
+        function showView(viewName) {
+            const planView = document.getElementById('meal-plan-view');
+            const shopView = document.getElementById('shopping-list-view');
+            const navPlan = document.getElementById('nav-plan');
+            const navShop = document.getElementById('nav-shop');
+
+            if (viewName === 'plan') {
+                planView.classList.remove('hidden');
+                shopView.classList.add('hidden');
+                navPlan.classList.add('nav-button-active');
+                navShop.classList.remove('nav-button-active');
+            } else {
+                planView.classList.add('hidden');
+                shopView.classList.remove('hidden');
+                navShop.classList.add('nav-button-active');
+                navPlan.classList.remove('nav-button-active');
+            }
+        }
+        
+        function createMealCard(meal, type) {
+            if (!meal) return '';
+            const icon = type === 'Lunch' ? '☀️' : '🌙';
+            let ingredientsHTML = '';
+            let recipeHTML = '';
+
+            if (meal.ingredients) {
+                ingredientsHTML = `<h4 class="font-semibold text-gray-700 mt-4 mb-2">Ingredients</h4><ul class="list-disc list-inside text-gray-600 space-y-1 text-sm">${meal.ingredients.map(i => `<li>${i}</li>`).join('')}</ul>`;
+            }
+            if (meal.recipe) {
+                recipeHTML = `<h4 class="font-semibold text-gray-700 mt-4 mb-2">Recipe</h4><ol class="list-decimal list-inside text-gray-600 space-y-2 text-sm">${meal.recipe.map(s => `<li>${s}</li>`).join('')}</ol>`;
+            }
+
+            const batchTag = meal.batch ? `<span class="absolute top-4 right-4 text-xs font-semibold bg-green-100 text-green-800 py-1 px-3 rounded-full">Batch Cook</span>` : '';
+
+            return `
+                <div class="content-card relative rounded-2xl p-6 shadow-sm">
+                    ${batchTag}
+                    <h3 class="text-xl font-bold text-gray-800">${icon} ${type}</h3>
+                    <p class="text-lg font-semibold text-gray-700 mt-1">${meal.name}</p>
+                    ${ingredientsHTML}
+                    ${recipeHTML}
+                </div>
+            `;
+        }
+
+        function renderMealPlan(dayId) {
+            const display = document.getElementById('meal-display');
+            const dayData = mealData[dayId];
+            display.innerHTML = '';
+
+            const lunchCardHTML = createMealCard(dayData.lunch, 'Lunch');
+            const dinnerCardHTML = createMealCard(dayData.dinner, 'Dinner');
+
+            if (lunchCardHTML) display.innerHTML += lunchCardHTML;
+            if (dinnerCardHTML) display.innerHTML += dinnerCardHTML;
+            
+            if (!lunchCardHTML && !dinnerCardHTML) {
+                display.innerHTML = `<p class="text-center text-gray-500 md:col-span-2">No meals planned for this time.</p>`;
+            }
+
+            document.querySelectorAll('.day-button').forEach(btn => btn.classList.remove('day-button-active'));
+            document.getElementById(`day-${dayId}`).classList.add('day-button-active');
+        }
+
+        function renderShoppingList() {
+            const display = document.getElementById('list-display');
+            display.innerHTML = '';
+
+            for (const category in shoppingListData) {
+                const categoryDiv = document.createElement('div');
+                const title = document.createElement('h3');
+                title.textContent = category;
+                title.className = "text-xl font-bold text-gray-800 mb-4 border-b-2 border-gray-200 pb-2";
+                categoryDiv.appendChild(title);
+
+                const list = document.createElement('ul');
+                list.className = "space-y-3";
+                shoppingListData[category].forEach((item, index) => {
+                    const li = document.createElement('li');
+                    li.className = "flex items-center";
+                    const checkboxId = `${category.replace(/\s+/g, '-')}-${index}`;
+                    li.innerHTML = `
+                        <input type="checkbox" id="${checkboxId}" class="h-5 w-5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                        <label for="${checkboxId}" class="ml-3 block text-gray-900 text-base">${item}</label>
+                    `;
+                    li.querySelector('input').addEventListener('change', (e) => {
+                        li.classList.toggle('shopping-item-checked', e.target.checked);
+                    });
+                    list.appendChild(li);
+                });
+                categoryDiv.appendChild(list);
+                display.appendChild(categoryDiv);
+            }
+        }
+
+        function renderChart() {
+            const ctx = document.getElementById('mealTypeChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Greek', 'Italian', 'Mexican-Inspired', 'Indian-Inspired', 'British', 'Pizza'],
+                    datasets: [{
+                        label: 'Meal Types',
+                        data: [1, 2, 1, 1, 1, 1], // Based on Skewers, Bolognese/Risotto, Burgers, Curry, Jacket Pot, Naan Pizza
+                        backgroundColor: [
+                            '#89CFF0', // Baby Blue
+                            '#98FB98', // Pale Green
+                            '#FFDAB9', // Peach Puff
+                            '#F0E68C', // Khaki
+                            '#E6A4B4', // Muted Pink
+                            '#BCA297'  // Taupe
+                        ],
+                        borderColor: '#FFFFFF',
+                        borderWidth: 3,
+                        hoverOffset: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 20,
+                                font: {
+                                    family: "'Inter', sans-serif",
+                                    size: 14
+                                }
+                            }
+                        },
+                        tooltip: {
+                            bodyFont: {
+                                family: "'Inter', sans-serif",
+                            },
+                            titleFont: {
+                                family: "'Inter', sans-serif",
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+    </script>
+</body>
+</html>
